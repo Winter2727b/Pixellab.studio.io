@@ -1,33 +1,23 @@
-# PixelLab Studio v2 — Image Editor
+# PixelLab Studio v2.1 — editor imej untuk telefon & komputer
 
-Editor gambar dan reka bentuk untuk Android, iPhone dan desktop, dibina dengan HTML, CSS dan JavaScript tulen. Tiada keperluan akaun, langganan atau API luaran.
+Versi kemas kini kepada PixelLab Studio v2.0. Reka bentuk minimalis, alat utama, aliran import/crop imej, nisbah kanvas, Relative Size, layers, simpanan projek dan eksport **dikekalkan**.
 
-## Cara menjalankan
+## Ditambah dalam v2.1
 
-- **Satu fail:** buka `PixelLab_Studio_v2_Offline.html` di Chrome, Safari atau browser moden.
-- **Sebagai website:** ekstrak ZIP, muat naik `index.html`, `style.css`, `app.js` ke folder root hosting statik, kemudian lawati domain hosting.
-- Untuk ujian secara lokal, buka `index.html` atau gunakan pelayan statik seperti `python -m http.server 8000` dalam folder ini.
+- **Import font sendiri:** Buka alat **Teks**, pilih atau tambah layer teks, kemudian tekan **＋ Import font sendiri**. Pilih fail `.ttf`, `.otf`, `.woff` atau `.woff2` (maksimum 3 MB). Font akan digunakan pada teks dipilih dan tersedia dalam pilihan jenis font projek.
+- **Font bersama projek:** Data font disertakan dalam fail projek `.pixellab.json`, supaya font dipulihkan ketika projek dibuka semula. Fail projek boleh menjadi lebih besar selepas memasukkan font. Auto-save pelayar bergantung pada kuota storan; simpan JSON sebagai salinan projek.
+- **14 bentuk baharu:** segi lima, segi enam, segi lapan, hati, palang, kilat, buih dialog, awan, trapezium, paralelogram, chevron, segi tiga siku, separuh bulat dan perisai. Semua boleh diubah warna, saiz, putaran, gradient dan outline melalui editor bentuk sedia ada.
+- **Stiker/emoji tambahan:** Koleksi baharu dipecahkan mengikut kumpulan Popular, Hiasan & simbol, Emoji & ekspresi, Alam & haiwan, Makanan & minuman, Aktiviti & objek, serta Hati & isyarat. Ikon menggunakan emoji sistem, jadi rupa glyph mungkin sedikit berbeza antara telefon dan komputer.
 
-## Fitur baharu v2
+## Cara jalankan
 
-1. **Buka imej:** tekan butang **Buka imej** di atas untuk memilih gambar. Pilih nisbah crop dan kemudian tekan **Buka sebagai kanvas**. Kanvas baru menggunakan dimensi/nibah hasil crop; imej kekal sebagai layer yang boleh diedit.
-2. **Crop ketika import:** pilih Asal, 1:1, 4:5, 3:4, 16:9, 9:16, 3:2 atau Bebas. Seret bahagian tengah bingkai untuk mengalih crop atau seret penjuru untuk mengubah saiznya. Pilih **Tambah layer** jika hendak menggunakan projek yang ada.
-3. **Maintain Ratio:** apabila memilih objek, buka panel **Saiz & posisi**, aktifkan **Maintain Ratio** untuk mengekalkan nisbah lebar/tinggi semasa resize dari panel atau bucu pada kanvas. Tekan Shift ketika drag untuk mengganti sementara status kunci nisbah.
-4. **Relative Size:** gerakkan slider dari 10–300% atau tekan preset 50%, 75%, 100%, 150%. Saiz relatif diukur terhadap saiz objek pada masa mula dimasukkan / mula menggunakan tetapan relatif.
-5. **Saiz kanvas:** pilih Saiz tersuai pada bahagian atas. Maintain Ratio di dialog ini akan mengubah tinggi secara automatik apabila lebar diubah (dan sebaliknya).
-6. **Reka bentuk minimalis:** antara muka terang dan responsif dengan toolbar bawah untuk telefon.
+1. Buka `index.html` pada browser (Chrome, Safari, Firefox, Edge) atau hos folder ini pada penyedia hosting statik.
+2. Editor berjalan di pihak browser; tiada server atau akaun diperlukan.
+3. Untuk penggunaan offline satu fail, buka `PixelLab_Studio_v2.1_Offline.html` yang diedarkan berasingan.
 
-## Fitur sedia ada
+## Kandungan
 
-- Tambah teks, font, tipografi, outline, bayang, gradient, 3D, curve, reflection, emboss, tekstur
-- Import imej, crop (termasuk crop manual selepas import), efek, opacity, perspektif, remove background mengikut warna
-- Bentuk, stiker, emoji, lukisan, berus, latar warna/gradient/imej/transparan
-- Layers, lock, duplicate, delete, susun ke depan/belakang, undo/redo
-- Simpan dan buka projek JSON, eksport PNG/JPG/WebP pada resolusi 1×/2×/3×, kongsi melalui Web Share apabila disokong browser
-
-## Nota
-
-- Crop ketika import menghasilkan salinan imej crop pada layer, jadi bahagian di luar crop bukan sebahagian daripada imej import baharu.
-- Gambar yang sangat besar dikecilkan kepada panjang maksimum 5000 px pada proses import sambil mengekalkan nisbah.
-- Projek boleh disimpan sebagai JSON untuk diedit kemudian. Autosave ke browser juga dicuba secara setempat bergantung pada ruang storan.
-- Remove Background menggunakan padanan warna (bukan AI semantik).
+- `index.html` — susun atur editor
+- `style.css` — gaya minimalis asal v2.0 (tidak diubah)
+- `app.js` — fungsi editor + penambahan font, bentuk dan pelekat
+- `README.md` — panduan ini
