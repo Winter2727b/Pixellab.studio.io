@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="PixelLab Studio — editor gambar, teks, poster, logo, dan thumbnail atas talian.">
+  <title>PixelLab Studio — Image Editor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand"><div class="brand-icon"><span></span><span></span><span></span><span></span></div><div class="brand-words">Pixel<span>Lab</span><small>STUDIO</small></div></div>
+    <div class="top-divider"></div>
+    <div class="project-title"><span class="file-symbol">▣</span><input id="projectName" value="Reka Bentuk Saya" aria-label="Nama projek" title="Nama projek"><span class="saved-indicator" id="saveStatus">●</span></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="undoBtn" title="Undo • Ctrl+Z" aria-label="Undo">↶</button>
+      <button class="icon-btn" id="redoBtn" title="Redo • Ctrl+Shift+Z" aria-label="Redo">↷</button>
+      <span class="top-divider compact"></span>
+      <button class="btn ghost hide-small" id="newBtn">＋ Projek baru</button>
+      <button class="btn ghost hide-small" id="openBtn">Buka projek</button>
+      <button class="btn open-image-btn" id="openImageBtn" title="Buka gambar dan crop dahulu">▧ <span class="open-image-label">Buka imej</span></button>
+      <button class="btn secondary" id="saveBtn"><span class="hide-xs">▣ </span>Simpan</button>
+      <button class="btn primary" id="exportBtn">↥ Eksport</button>
+    </div>
+  </header>
+  <div class="workspace">
+    <aside class="tool-rail" id="toolRail" aria-label="Alat editor">
+      <div class="rail-caption">TOOLS</div>
+      <button class="tool active" data-tool="select" title="Pilih dan pindah"><span class="tool-icon">↖</span><span>Pilih</span></button>
+      <button class="tool" data-tool="text" title="Tambah tulisan"><span class="tool-icon serif">T</span><span>Teks</span></button>
+      <button class="tool" data-tool="image" title="Import gambar dan crop"><span class="tool-icon">▧</span><span>Gambar</span></button>
+      <button class="tool" data-tool="shape" title="Bentuk"><span class="tool-icon">▢</span><span>Bentuk</span></button>
+      <button class="tool" data-tool="sticker" title="Stiker dan emoji"><span class="tool-icon">✦</span><span>Stiker</span></button>
+      <button class="tool" data-tool="draw" title="Lukis di kanvas"><span class="tool-icon">✎</span><span>Lukis</span></button>
+      <button class="tool" data-tool="background" title="Ubah latar"><span class="tool-icon">▦</span><span>Latar</span></button>
+      <div class="rail-separator"></div>
+      <button class="tool" data-tool="layers" title="Urus layer"><span class="tool-icon">▱</span><span>Layers</span></button>
+      <div class="rail-bottom"><button class="tool" id="helpBtn" title="Panduan ringkas"><span class="tool-icon">?</span><span>Bantuan</span></button></div>
+    </aside>
+
+    <main class="stage-column">
+      <div class="stage-topline"><span class="stage-label">KANVAS <span id="stageDims">1080 × 1080</span></span><div class="stage-controls"><label for="presetSelect" class="hide-xs">Saiz kanvas</label><select id="presetSelect" aria-label="Saiz kanvas"><option value="1080x1080">Instagram · 1080 × 1080</option><option value="1280x720">Thumbnail · 1280 × 720</option><option value="1080x1920">Story · 1080 × 1920</option><option value="1200x630">Post · 1200 × 630</option><option value="custom">Saiz tersuai…</option></select></div></div>
+      <div class="stage-scroller" id="stageScroller"><div class="stage-canvas-holder"><canvas id="canvas" width="1080" height="1080" aria-label="Kanvas reka bentuk interaktif"></canvas></div></div>
+      <div class="stage-footer"><div class="stage-hint" id="stageHint">↖ Klik objek untuk mengedit · Tarik untuk pindah</div><div class="zoom-group"><button class="subtle" id="zoomOut" title="Kecilkan paparan">−</button><span id="zoomValue">100%</span><button class="subtle" id="zoomIn" title="Besarkan paparan">＋</button><button class="subtle fit-btn" id="zoomFit">Muat</button></div></div>
+    </main>
+
+    <aside class="inspector" id="inspector">
+      <div class="panel-head"><div class="panel-title"><span class="panel-overline">PIXELLAB EDITOR</span><h2 id="panelTitle">Editor</h2></div><button class="close-panel" id="closePanel" aria-label="Tutup panel">×</button></div>
+      <div class="tabbar" role="tablist"><button class="tab active" data-tab="properties">⚙ Properti</button><button class="tab" data-tab="layers">▱ Layers <span class="count" id="layerCount">0</span></button></div>
+      <div class="panel-body" id="panelBody"></div>
+      <div class="panel-bottom"><span>PixelLab Studio</span><span>Editor • v2.0</span></div>
+    </aside>
+  </div>
+  <div class="mobile-pane-hint" id="mobileHint">Pilih alat untuk mula berkarya</div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<div class="modal-shell" id="modalShell" hidden><div class="modal-backdrop" data-close="modal"></div><div class="modal" role="dialog" aria-modal="true"><div class="modal-heading"><h3 id="modalTitle">Tetapan</h3><button class="close-panel" id="modalClose" aria-label="Tutup">×</button></div><div id="modalContent"></div></div></div>
+<input type="file" id="fileImage" accept="image/*" hidden>
+<input type="file" id="fileBackground" accept="image/*" hidden>
+<input type="file" id="fileTexture" accept="image/*" hidden>
+<input type="file" id="fileProject" accept=".json,application/json" hidden>
+<script src="app.js"></script>
+</body>
+</html>
