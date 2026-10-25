@@ -6,6 +6,17 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="PixelLab Studio — editor gambar, teks, poster, logo, dan thumbnail atas talian.">
   <title>PixelLab Studio — Image Editor</title>
+  <script>
+    // Apply the saved appearance before the stylesheet paints the page.
+    (function () {
+      var theme = 'light';
+      try {
+        if (localStorage.getItem('pixellab-studio-theme') === 'dark') theme = 'dark';
+      } catch (e) { /* Browsers may disable local storage. */ }
+      document.documentElement.setAttribute('data-theme', theme);
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#141925' : '#ffffff');
+    })();
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,9 +29,10 @@
       <button class="icon-btn" id="undoBtn" title="Undo • Ctrl+Z" aria-label="Undo">↶</button>
       <button class="icon-btn" id="redoBtn" title="Redo • Ctrl+Shift+Z" aria-label="Redo">↷</button>
       <span class="top-divider compact"></span>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Mod gelap" aria-pressed="false" title="Tukar ke mod gelap"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label" aria-hidden="true">Gelap</span></button>
       <button class="btn ghost hide-small" id="newBtn">＋ Projek baru</button>
       <button class="btn ghost hide-small" id="openBtn">Buka projek</button>
-      <button class="btn open-image-btn" id="openImageBtn" title="Buka gambar dan crop dahulu">▧ <span class="open-image-label">Buka imej</span></button>
+      <button class="btn open-image-btn" id="openImageBtn" aria-label="Buka imej" title="Buka gambar dan crop dahulu">▧ <span class="open-image-label">Buka imej</span></button>
       <button class="btn secondary" id="saveBtn"><span class="hide-xs">▣ </span>Simpan</button>
       <button class="btn primary" id="exportBtn">↥ Eksport</button>
     </div>
@@ -50,7 +62,7 @@
       <div class="panel-head"><div class="panel-title"><span class="panel-overline">PIXELLAB EDITOR</span><h2 id="panelTitle">Editor</h2></div><button class="close-panel" id="closePanel" aria-label="Tutup panel">×</button></div>
       <div class="tabbar" role="tablist"><button class="tab active" data-tab="properties">⚙ Properti</button><button class="tab" data-tab="layers">▱ Layers <span class="count" id="layerCount">0</span></button></div>
       <div class="panel-body" id="panelBody"></div>
-      <div class="panel-bottom"><span>PixelLab Studio</span><span>Editor • v2.1</span></div>
+      <div class="panel-bottom"><span>PixelLab Studio</span><span>Editor • v2.2</span></div>
     </aside>
   </div>
   <div class="mobile-pane-hint" id="mobileHint">Pilih alat untuk mula berkarya</div>

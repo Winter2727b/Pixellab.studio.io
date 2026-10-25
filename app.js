@@ -7,6 +7,25 @@ const ctx = canvas.getContext('2d', {willReadFrequently:true});
 const stage = $('#stageScroller');
 const panel = $('#panelBody');
 const PI = Math.PI;
+const themeStorageKey = 'pixellab-studio-theme';
+function setTheme(theme, persist = true) {
+  const dark = theme === 'dark';
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  const toggle = $('#themeToggle');
+  if (toggle) {
+    toggle.setAttribute('aria-pressed', String(dark));
+    toggle.title = dark ? 'Tukar ke mod cerah' : 'Tukar ke mod gelap';
+    toggle.querySelector('.theme-icon').textContent = dark ? '☀' : '☾';
+    toggle.querySelector('.theme-label').textContent = dark ? 'Cerah' : 'Gelap';
+  }
+  const themeMeta = $('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.content = dark ? '#141925' : '#ffffff';
+  if (persist) {
+    try { localStorage.setItem(themeStorageKey, dark ? 'dark' : 'light'); }
+    catch (e) { /* Switching still works when storage is unavailable. */ }
+  }
+}
+
 const fonts = ['Arial','Impact','Georgia','Trebuchet MS','Verdana','Tahoma','Courier New','Times New Roman','system-ui','serif','monospace'];
 const palette = ['#ffffff','#0c102a','#a27aff','#58c9ff','#f472b6','#ffca71','#7de7a3','#ff7575','#b7a6f8','#64748b'];
 const stickers = ['🔥','✨','❤️','⭐','💎','👑','⚡','🌈','🚀','💯','🎉','🎨','😊','😍','😎','👍','☀️','🌸','💜','✅','🎯','🏆','☁️','🌙'];
@@ -321,6 +340,10 @@ function openCropImport(im,file,usage='item'){
 }
 function newProject(){showModal('Cipta projek baharu',`<p class="muted">Pilih kanvas kosong atau mula dengan susun atur contoh.</p><div class="grid-two"><div class="field"><label>Lebar (px)</label><input id="newW" type="number" value="1080" min="100" max="5000"></div><div class="field"><label>Tinggi (px)</label><input id="newH" type="number" value="1080" min="100" max="5000"></div></div><div class="modal-actions"><button id="newBlank" class="btn primary">▢ Kanvas kosong</button><button id="newDemo" class="btn secondary">✦ Guna contoh</button></div>`);const make=(demo)=>{doc={name:'Projek Baharu',width:clamp(asNum($('#newW').value,1080),100,5000),height:clamp(asNum($('#newH').value,1080),100,5000),background:{type:'color',color:'#ffffff',color2:'#a17aff',angle:35,src:''},items:[]};selectedId=null;if(demo){doc.background.type='gradient';doc.background.color='#0f1231';doc.background.color2='#31235e';defaultScene();}$('#projectName').value=doc.name;canvas.width=doc.width;canvas.height=doc.height;history=[];historyIndex=-1;commit();syncPreset();fitCanvas();panelMode=demo?'object':'home';refreshPanel();render();hideModal();toast('Projek baharu dicipta');};$('#newBlank').onclick=()=>make(false);$('#newDemo').onclick=()=>make(true);}
 function init(){
+ setTheme(document.documentElement.getAttribute('data-theme') || 'light', false);
+ $('#themeToggle').addEventListener('click', () => {
+   setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+ });
  try{const saved=localStorage.getItem('pixellab-studio-v1');if(saved){const data=JSON.parse(saved);if(data.width>0&&data.height>0&&Array.isArray(data.items)){doc=data;selectedId=null;}else {doc.items=[];selectedId=null;}}else {doc.items=[];selectedId=null;}}catch(e){doc.items=[];selectedId=null;}
  loadProjectFonts();canvas.width=doc.width;canvas.height=doc.height;$('#projectName').value=doc.name||'Reka Bentuk Saya';syncPreset();history=[snapshot()];historyIndex=0;updateHistoryUI();refreshPanel();fitCanvas();render();updateToolUI();
  $$('.tool[data-tool]').forEach(b=>b.addEventListener('click',()=>selectTool(b.dataset.tool)));
