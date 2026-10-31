@@ -332,3 +332,11 @@ html[data-theme="dark"]{
   .open-image-label{display:none}
   .topbar .open-image-btn{min-width:32px;padding:0 7px}
 }
+
+/* Font library — scrollable and responsive for large collections */
+.installed-font-list{margin:14px 0;max-height:min(51vh,390px);overflow-y:auto;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin}
+.installed-font-row{display:flex;align-items:center;gap:12px;justify-content:space-between;border:1px solid var(--stroke2);background:var(--surface2);padding:10px 12px;border-radius:11px}
+.installed-font-info{min-width:0;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.installed-font-info strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.installed-font-info span{font-size:20px;line-height:1.35;overflow:hidden;white-space:nowrap;color:var(--text)}
+.installed-font-row .mini-btn{flex-shrink:0}

@@ -45,32 +45,149 @@ const shapes = [{id:'rect',glyph:'▢',label:'Kotak'},{id:'roundrect',glyph:'▢
 let seq = 1, selectedId = null, activeTool='select', panelMode='home', activeTab='properties', zoom=1;
 let history = [], historyIndex=-1, historyTimer=null, toastTimer=null, interaction=null, drawing=null;
 let pendingImportMode = 'layer';
+// Font yang dipasang disimpan berasingan daripada projek, dan boleh dipakai pada projek lain.
+// IndexedDB menyimpan fail font yang lebih besar daripada kuota localStorage biasa.
 const loadedCustomFonts = new Map();
+const fontLibrary = new Map();
+const fontBackupKey = 'pixellab-studio-installed-fonts';
+let databasePromise = null;
+function openDatabase(){
+ if(databasePromise)return databasePromise;
+ databasePromise=new Promise(resolve=>{
+   if(!('indexedDB' in window)){resolve(null);return;}
+   let request;
+   try{request=indexedDB.open('pixellab-studio-data',1);}catch(e){resolve(null);return;}
+   request.onupgradeneeded=()=>{
+     const db=request.result;
+     if(!db.objectStoreNames.contains('fonts'))db.createObjectStore('fonts',{keyPath:'family'});
+     if(!db.objectStoreNames.contains('documents'))db.createObjectStore('documents',{keyPath:'id'});
+   };
+   request.onsuccess=()=>resolve(request.result);
+   request.onerror=()=>resolve(null);
+   request.onblocked=()=>resolve(null);
+ });
+ return databasePromise;
+}
+function dbRequest(db,store,method,value){
+ return new Promise((resolve,reject)=>{
+   try{
+     const tx=db.transaction(store,method==='get'||method==='getAll'?'readonly':'readwrite');
+     const req=tx.objectStore(store)[method](...(method==='getAll'?[]:[value]));
+     let result;
+     req.onsuccess=()=>{result=req.result;};
+     tx.oncomplete=()=>resolve(result);
+     tx.onerror=()=>reject(tx.error||new Error('Simpanan gagal'));
+     tx.onabort=()=>reject(tx.error||new Error('Simpanan dibatalkan'));
+   }catch(e){reject(e);}
+ });
+}
+async function storedFonts(){
+ const db=await openDatabase();
+ if(db){try{return await dbRequest(db,'fonts','getAll');}catch(e){console.warn('Pustaka font gagal dibaca:',e);}}
+ try{return JSON.parse(localStorage.getItem(fontBackupKey)||'[]');}catch(e){return [];}
+}
+async function persistFont(font){
+ const db=await openDatabase();
+ if(db){try{await dbRequest(db,'fonts','put',font);return true;}catch(e){console.warn('Storan font penuh atau gagal:',e);return false;}}
+ try{
+   const previous=JSON.parse(localStorage.getItem(fontBackupKey)||'[]');
+   const next=previous.filter(f=>f.family!==font.family);next.push(font);
+   localStorage.setItem(fontBackupKey,JSON.stringify(next));return true;
+ }catch(e){console.warn('Storan font tidak tersedia:',e);return false;}
+}
+async function storedAutosave(){
+ const db=await openDatabase();
+ if(db){try{const entry=await dbRequest(db,'documents','get','autosave');if(entry?.json)return entry.json;}catch(e){console.warn('Autosave gagal dibaca:',e);}}
+ try{return localStorage.getItem('pixellab-studio-v1');}catch(e){return null;}
+}
+async function saveAutosave(json){
+ const db=await openDatabase();
+ if(db){await dbRequest(db,'documents','put',{id:'autosave',json});return;}
+ localStorage.setItem('pixellab-studio-v1',json);
+}
+function isFontData(font){return font&&typeof font.family==='string'&&typeof font.src==='string'&&/^data:(?:(?:font|application|binary)\/[^;,]+)?;base64,/i.test(font.src);}
 function loadCustomFont(font){
- if(!font||typeof font.family!=='string'||typeof font.src!=='string'||!/^data:(?:(?:font|application|binary)\/[^;,]+)?;base64,/i.test(font.src))return Promise.resolve(false);
+ if(!isFontData(font))return Promise.resolve(false);
  if(loadedCustomFonts.has(font.family))return loadedCustomFonts.get(font.family);
  if(!('FontFace' in window)||!document.fonts)return Promise.resolve(false);
- const task=(async()=>{try{const face=new FontFace(font.family,`url("${font.src}")`);await face.load();document.fonts.add(face);render();return true;}catch(e){console.warn('Custom font gagal dimuat:',e);return false;}})();
+ const task=(async()=>{try{
+   const face=new FontFace(font.family,`url("${font.src}")`);
+   await face.load();document.fonts.add(face);render();return true;
+ }catch(e){console.warn('Font gagal dimuat:',font.name,e);return false;}})();
  loadedCustomFonts.set(font.family,task);return task;
 }
-function loadProjectFonts(){for(const font of (doc.customFonts||[]))loadCustomFont(font);}
-function importFontFile(file){
- if(!file)return;
- if(!/\.(ttf|otf|woff2?)$/i.test(file.name)){toast('Pilih font TTF, OTF, WOFF atau WOFF2');return;}
- if(file.size>3*1024*1024){toast('Saiz font maksimum 3 MB');return;}
- const target=getItem();if(target?.type!=='text'){toast('Pilih layer teks dahulu');return;}
- const targetId=target.id;
- const reader=new FileReader();reader.onerror=()=>toast('Font gagal dibaca');
- reader.onload=async()=>{
-   const font={family:'CustomFont_'+Date.now().toString(36)+'_'+seq++,name:file.name.replace(/\.(ttf|otf|woff2?)$/i,''),src:String(reader.result)};
-   const ok=await loadCustomFont(font);if(!ok){toast('Fail font tidak sah atau gagal dimuat');return;}
-   if(!Array.isArray(doc.customFonts))doc.customFonts=[];
-   doc.customFonts.push(font);
-   const current=doc.items.find(i=>i.id===targetId&&i.type==='text');
-   if(current){current.font=font.family;selectedId=targetId;}
-   commit();refreshPanel();render();toast('Font '+font.name+' berjaya diimport');
- };
- reader.readAsDataURL(file);
+async function loadInstalledFonts(){
+ const stored=await storedFonts();
+ for(const font of stored){if(isFontData(font)){fontLibrary.set(font.family,font);loadCustomFont(font);}}
+}
+async function loadProjectFonts(remember=false){
+ if(!Array.isArray(doc.customFonts))doc.customFonts=[];
+ for(const font of doc.customFonts){
+   const complete=isFontData(font)?font:fontLibrary.get(font.family);
+   if(!complete)continue;
+   fontLibrary.set(complete.family,complete);
+   loadCustomFont(complete);
+   if(remember)await persistFont(complete);
+ }
+}
+function projectFontOptions(){
+ const opts=fonts.map(name=>[name,name]);
+ const known=new Set(fonts);
+ for(const font of fontLibrary.values())if(!known.has(font.family)){
+   opts.push([font.family,'✦ '+font.name]);known.add(font.family);
+ }
+ return opts;
+}
+function selectCustomFont(family){
+ const o=getItem(),font=fontLibrary.get(family);
+ if(!o||o.type!=='text'||!font)return;
+ o.font=font.family;
+ if(!Array.isArray(doc.customFonts))doc.customFonts=[];
+ if(!doc.customFonts.some(f=>f.family===font.family))doc.customFonts.push({family:font.family,name:font.name});
+ commit();refreshPanel();render();
+}
+function importedFontContent(){
+ const included=new Set((doc.customFonts||[]).map(f=>f.family));
+ for(const o of doc.items||[])if(o.type==='text'&&fontLibrary.has(o.font))included.add(o.font);
+ return [...included].map(family=>fontLibrary.get(family)||(doc.customFonts||[]).find(f=>f.family===family)).filter(isFontData);
+}
+function readFontFile(file){return new Promise((resolve,reject)=>{
+ const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error||new Error('Fail tidak dapat dibaca'));reader.readAsDataURL(file);
+});}
+async function importFontFiles(files){
+ const chosen=Array.from(files||[]);if(!chosen.length)return;
+ const textId=getItem()?.type==='text'?selectedId:null;
+ let added=0,duplicates=0,invalid=0,unsaved=0,first=null;
+ for(const file of chosen){
+   if(!/\.(ttf|otf|woff2?)$/i.test(file.name)||file.size>15*1024*1024||!file.size){invalid++;continue;}
+   try{
+     const src=await readFontFile(file),name=file.name.replace(/\.(ttf|otf|woff2?)$/i,'');
+     const existing=[...fontLibrary.values()].find(f=>f.name===name&&f.src===src);
+     if(existing){duplicates++;if(!first)first=existing;continue;}
+     const font={family:'CustomFont_'+Date.now().toString(36)+'_'+(seq++),name,src};
+     if(!await loadCustomFont(font)){invalid++;continue;}
+     fontLibrary.set(font.family,font);
+     if(!await persistFont(font))unsaved++;
+     if(!first)first=font;
+     added++;
+   }catch(e){invalid++;console.warn('Gagal import font:',file.name,e);}
+ }
+ if(first&&textId){
+   const layer=doc.items.find(o=>o.id===textId&&o.type==='text');
+   if(layer){selectedId=textId;selectCustomFont(first.family);}
+ }
+ refreshPanel();render();
+ const message=`${added} font diimport${duplicates?', '+duplicates+' sudah tersedia':''}${invalid?', '+invalid+' gagal':''}`;
+ toast(unsaved?message+' · '+unsaved+' gagal disimpan kekal':message);
+ if(!$('#modalShell').hidden&&$('#modalTitle').textContent==='Pustaka Font')showFontLibrary();
+}
+function showFontLibrary(){
+ const chosen=getItem()?.type==='text';
+ const installed=[...fontLibrary.values()].sort((a,b)=>a.name.localeCompare(b.name));
+ const list=installed.length?installed.map(f=>`<div class="installed-font-row"><div class="installed-font-info"><strong>${escapeHTML(f.name)}</strong><span style="font-family:'${escapeHTML(f.family)}', sans-serif">Aa Bb Cc 123</span></div>${chosen?`<button class="mini-btn" data-usefont="${escapeHTML(f.family)}">Guna</button>`:''}</div>`).join(''):'<p class="field-help">Belum ada font diimport. Pilih beberapa fail font untuk memasangnya.</p>';
+ showModal('Pustaka Font',`<p class="field-help">${installed.length} font dipasang dalam pelayar ini. Font boleh digunakan semula pada semua projek.</p><button id="modalImportFonts" class="primary-wide">＋ Import banyak font · TTF / OTF / WOFF / WOFF2</button><div class="installed-font-list">${list}</div><p class="field-help">Font yang digunakan disertakan dalam fail projek JSON. Storan pelayar kekal selagi data laman ini disimpan.</p>`);
+ $('#modalImportFonts').onclick=()=>$('#fileFont').click();
+ $('#modalContent').onclick=ev=>{const btn=ev.target.closest('[data-usefont]');if(btn){selectCustomFont(btn.dataset.usefont);hideModal();}};
 }
 const cropPresets = [['original','Asal'],['1:1','1:1'],['4:5','4:5'],['3:4','3:4'],['16:9','16:9'],['9:16','9:16'],['3:2','3:2'],['free','Bebas']];
 const imageCache = new Map(), transparentCache = new Map();
@@ -100,7 +217,7 @@ function defaultScene(){
  const cta=createText('MULA BERKARYA   ↗',doc.width/2,927);Object.assign(cta,{name:'Teks butang',font:'Arial',fontSize:28,weight:'700',color:'#1c163b',w:410,h:80});
  doc.items=[a,b,line,label,title,subtitle,pill,cta];selectedId=title.id;
 }
-function snapshot(){return JSON.stringify(doc);}
+function snapshot(){return JSON.stringify({...doc,customFonts:(doc.customFonts||[]).map(f=>({family:f.family,name:f.name}))});}
 function commit(){clearTimeout(historyTimer);const snap=snapshot();if(history[historyIndex]===snap)return;history=history.slice(0,historyIndex+1);history.push(snap);if(history.length>60)history.shift();historyIndex=history.length-1;updateHistoryUI();$('#saveStatus').style.color='#f3bb6b';scheduleAutosave();}
 function delayedCommit(){clearTimeout(historyTimer);historyTimer=setTimeout(commit,330);}
 function updateHistoryUI(){$('#undoBtn').disabled=historyIndex<=0;$('#redoBtn').disabled=historyIndex>=history.length-1;$('#layerCount').textContent=doc.items.length;}
@@ -108,7 +225,7 @@ function restore(snap){try{doc=JSON.parse(snap);loadProjectFonts();selectedId=nu
 function undo(){if(historyIndex>0){historyIndex--;restore(history[historyIndex]);toast('Perubahan dibatalkan');}}
 function redo(){if(historyIndex<history.length-1){historyIndex++;restore(history[historyIndex]);toast('Perubahan diulang');}}
 let autosaveTimer=null;
-function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(()=>{try{localStorage.setItem('pixellab-studio-v1',snapshot());$('#saveStatus').style.color='#65cba0';}catch(e){$('#saveStatus').style.color='#f3bb6b';}},650);}
+function scheduleAutosave(){clearTimeout(autosaveTimer);autosaveTimer=setTimeout(async()=>{try{await saveAutosave(snapshot());$('#saveStatus').style.color='#65cba0';}catch(e){console.warn('Autosave gagal:',e);$('#saveStatus').style.color='#f3bb6b';toast('Simpanan automatik gagal · simpan projek JSON');}},650);}
 function addObject(item){doc.items.push(item);selectedId=item.id;activeTool='select';panelMode='object';activeTab='properties';updateToolUI();refreshPanel();commit();render();showPanel();}
 function pickSelected(id){if(id&&doc.items.some(o=>o.id===id))selectedId=id;else selectedId=null;panelMode=selectedId?'object':'home';activeTab='properties';refreshPanel();render();}
 function removeItem(){const o=getItem();if(!o)return;doc.items=doc.items.filter(i=>i.id!==o.id);selectedId=null;panelMode='home';refreshPanel();commit();render();toast('Layer dipadam');}
@@ -134,8 +251,8 @@ function pointerMove(ev){const p=getPoint(ev);if(drawing){const pts=drawing.poin
 function pointerUp(ev){if(drawing){const pts=drawing.points;if(pts.length>1){let xs=pts.map(q=>q.x),ys=pts.map(q=>q.y);const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),cx=(minX+maxX)/2,cy=(minY+maxY)/2;const obj={id:uid(),type:'draw',name:'Lukisan',visible:true,locked:false,x:cx,y:cy,w:Math.max(25,maxX-minX),h:Math.max(25,maxY-minY),baseW:Math.max(25,maxX-minX),baseH:Math.max(25,maxY-minY),rotation:0,opacity:drawing.opacity,size:drawing.size,color:drawing.color,points:pts.map(pt=>({x:pt.x-cx,y:pt.y-cy}))};doc.items.push(obj);selectedId=obj.id;commit();$('#layerCount').textContent=doc.items.length;}drawing=null;render();return;}if(interaction){interaction=null;canvas.classList.remove('dragging');commit();refreshPanel();render();}}
 function download(blob,filename){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);}
 function filenameBase(){return (doc.name||'pixellab-design').replace(/[^\w\-\u00c0-\u024f\u1e00-\u1eff ]/g,'').trim().replace(/\s+/g,'-').slice(0,65)||'pixellab-design';}
-function saveProject(){doc.name=$('#projectName').value.trim()||'Reka Bentuk Saya';const blob=new Blob([JSON.stringify({format:'pixellab-studio',version:1,...doc},null,2)],{type:'application/json'});download(blob,filenameBase()+'.pixellab.json');commit();toast('Fail projek JSON disimpan');}
-function onProjectFile(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(!Array.isArray(data.items)||!Number.isFinite(data.width)||!Number.isFinite(data.height)||data.width<100||data.width>8000||data.height<100||data.height>8000)throw Error('Bukan projek sah');doc={name:String(data.name||'Projek dibuka'),width:data.width,height:data.height,background:data.background||{type:'color',color:'#ffffff'},items:data.items.filter(i=>i&&typeof i==='object'),customFonts:Array.isArray(data.customFonts)?data.customFonts.filter(f=>f&&typeof f.family==='string'&&typeof f.src==='string'):[]};loadProjectFonts();selectedId=null;canvas.width=doc.width;canvas.height=doc.height;$('#projectName').value=doc.name;history=[];historyIndex=-1;commit();syncPreset();fitCanvas();panelMode='home';refreshPanel();render();toast('Projek berjaya dibuka');}catch(e){toast('Fail projek JSON tidak sah');}};reader.readAsText(file);}
+function saveProject(){doc.name=$('#projectName').value.trim()||'Reka Bentuk Saya';const blob=new Blob([JSON.stringify({format:'pixellab-studio',version:2,...doc,customFonts:importedFontContent()},null,2)],{type:'application/json'});download(blob,filenameBase()+'.pixellab.json');commit();toast('Fail projek JSON disimpan');}
+function onProjectFile(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(!Array.isArray(data.items)||!Number.isFinite(data.width)||!Number.isFinite(data.height)||data.width<100||data.width>8000||data.height<100||data.height>8000)throw Error('Bukan projek sah');doc={name:String(data.name||'Projek dibuka'),width:data.width,height:data.height,background:data.background||{type:'color',color:'#ffffff'},items:data.items.filter(i=>i&&typeof i==='object'),customFonts:Array.isArray(data.customFonts)?data.customFonts.filter(f=>f&&typeof f.family==='string'&&typeof f.src==='string'):[]};loadProjectFonts(true);selectedId=null;canvas.width=doc.width;canvas.height=doc.height;$('#projectName').value=doc.name;history=[];historyIndex=-1;commit();syncPreset();fitCanvas();panelMode='home';refreshPanel();render();toast('Projek berjaya dibuka');}catch(e){toast('Fail projek JSON tidak sah');}};reader.readAsText(file);}
 function exportCanvas(scale=1,format='png'){const c=document.createElement('canvas');c.width=Math.round(doc.width*scale);c.height=Math.round(doc.height*scale);const context=c.getContext('2d');context.scale(scale,scale);if(format==='jpeg'&&doc.background.type==='transparent'){context.fillStyle='#ffffff';context.fillRect(0,0,doc.width,doc.height);}renderScene(context,false);return c;}
 async function exportImage(format,scale){const c=exportCanvas(scale,format);const type={'png':'image/png','jpeg':'image/jpeg','webp':'image/webp'}[format]||'image/png';return new Promise(res=>c.toBlob(res,type,.94));}
 async function startExport(share=false){const format=$('#outFormat')?.value||'png',scale=+($('#outScale')?.value||'1');const btn=$('#confirmExport');if(btn){btn.disabled=true;btn.textContent='Menyediakan…';}try{const blob=await exportImage(format,scale);if(!blob)throw Error('Export failed');const fn=filenameBase()+'.'+(format==='jpeg'?'jpg':format);if(share&&navigator.share&&navigator.canShare){const file=new File([blob],fn,{type:blob.type});if(navigator.canShare({files:[file]}))await navigator.share({files:[file],title:doc.name});else download(blob,fn);}else download(blob,fn);toast(share?'Imej sedia untuk dikongsi':'Imej berjaya dieksport');hideModal();}catch(e){if(e.name!=='AbortError')toast('Eksport/kongsi gagal — cuba format PNG');}finally{if(btn){btn.disabled=false;btn.textContent='↥ Muat turun';}}}
@@ -200,7 +317,7 @@ function toggleField(scope,key,label,value){return `<div class="inline-field"><l
 function section(title,inner,note=''){return `<section class="field-section"><h3 class="section-title">${title}${note?`<span class="section-note">${note}</span>`:''}</h3>${inner}</section>`;}
 function transformProps(o){return section('Saiz & posisi',`<label class="ratio-check"><input type="checkbox" class="switch" data-scope="item" data-key="maintainRatio" ${(o.maintainRatio??o.type==='image')?'checked':''}><span>Maintain Ratio <small>· kekalkan nisbah semasa resize</small></span></label><div class="field relative-size-field"><label>Relative Size <strong>${Math.round(o.relativeSize||100)}%</strong></label><input type="range" ${propAttr('item','relativeSize')} min="10" max="300" step="1" value="${Math.round(o.relativeSize||100)}"><div class="relative-presets"><button data-relative="50">50%</button><button data-relative="75">75%</button><button data-relative="100">100%</button><button data-relative="150">150%</button></div></div><div class="grid-two">${numField('item','w','Lebar (px)',Math.round(o.w),20,5000)}${numField('item','h','Tinggi (px)',Math.round(o.h),20,5000)}${numField('item','x','Posisi X',Math.round(o.x))}${numField('item','y','Posisi Y',Math.round(o.y))}</div>${rangeField('item','rotation','Putaran (°)',o.rotation||0,-180,180)}${rangeField('item','opacity','Kelegapan',o.opacity??1,0,1,.01)}<div class="action-stack"><button class="mini-btn" data-action="alignH">↔ Tengah H</button><button class="mini-btn" data-action="alignV">↕ Tengah V</button><button class="mini-btn" data-action="flipH">⇆ Cermin</button><button class="mini-btn" data-action="duplicate">▢ Gandakan</button></div>`);}
 function objectControls(o){return section('▱ Susunan layer',`<div class="action-stack"><button class="mini-btn" data-action="upLayer">↑ Ke depan</button><button class="mini-btn" data-action="downLayer">↓ Ke belakang</button><button class="mini-btn" data-action="lock">${o.locked?'🔓 Buka kunci':'🔒 Kunci objek'}</button><button class="mini-btn" data-action="visible">${o.visible?'◉ Sembunyi':'◎ Tunjuk'}</button><button class="mini-btn danger full" data-action="delete">⌫ Padam objek</button></div>`);}
-function textInspector(o){return section('✎ Kandungan teks',textField('item','text','Edit Text',o.text,true)+chooseField('item','font','Jenis font',o.font,[...fonts.map(x=>[x,x]),...(doc.customFonts||[]).map(f=>[f.family,'✦ '+f.name])])+`<button class="mini-btn full" type="button" data-action="importFont">＋ Import font sendiri · TTF / OTF / WOFF</button><p class="field-help">Font import disertakan dalam fail projek JSON.</p><div class="grid-two">${chooseField('item','weight','Ketebalan',o.weight,[['400','Regular'],['600','Semibold'],['700','Bold'],['900','Extra Bold']])}${toggleField('item','italic','Italic',o.italic)}</div>`)+section('Aa Tipografi',rangeField('item','fontSize','Saiz tulisan',o.fontSize,12,400)+rangeField('item','letterSpacing','Jarak huruf',o.letterSpacing,-10,45)+`<div class="field"><label>Align — penjajaran</label><div class="segmented">${[['left','≡ Kiri'],['center','≡ Tengah'],['right','≡ Kanan']].map(([v,l])=>`<button data-set="align" data-val="${v}" class="${o.align===v?'active':''}">${l}</button>`).join('')}</div></div>`+rangeField('item','curve','Curve — lengkung tulisan',o.curve,-100,100))+
+function textInspector(o){return section('✎ Kandungan teks',textField('item','text','Edit Text',o.text,true)+chooseField('item','font','Jenis font',o.font,projectFontOptions())+`<button class="mini-btn full" type="button" data-action="importFont">＋ Import banyak font · TTF / OTF / WOFF / WOFF2</button><button class="mini-btn full" type="button" data-action="fontLibrary">▤ Pustaka font yang tersimpan</button><p class="field-help">Import banyak fail serentak. Font kekal dalam pelayar dan disertakan dalam projek JSON apabila digunakan.</p><div class="grid-two">${chooseField('item','weight','Ketebalan',o.weight,[['400','Regular'],['600','Semibold'],['700','Bold'],['900','Extra Bold']])}${toggleField('item','italic','Italic',o.italic)}</div>`)+section('Aa Tipografi',rangeField('item','fontSize','Saiz tulisan',o.fontSize,12,400)+rangeField('item','letterSpacing','Jarak huruf',o.letterSpacing,-10,45)+`<div class="field"><label>Align — penjajaran</label><div class="segmented">${[['left','≡ Kiri'],['center','≡ Tengah'],['right','≡ Kanan']].map(([v,l])=>`<button data-set="align" data-val="${v}" class="${o.align===v?'active':''}">${l}</button>`).join('')}</div></div>`+rangeField('item','curve','Curve — lengkung tulisan',o.curve,-100,100))+
  section('🎨 Warna & efek',`<div class="grid-two">${colorField('item','color','Warna teks',o.color)}${colorField('item','color2','Warna kedua',o.color2)}</div>`+toggleField('item','gradient','Gradient dua warna',o.gradient)+rangeField('item','strokeWidth','Stroke / outline',o.strokeWidth,0,30)+colorField('item','strokeColor','Warna outline',o.strokeColor)+toggleField('item','shadow','Shadow',o.shadow)+colorField('item','shadowColor','Warna bayang',o.shadowColor)+`<div class="grid-two">${numField('item','shadowX','Bayang X',o.shadowX,-150,150)}${numField('item','shadowY','Bayang Y',o.shadowY,-150,150)}</div>`+rangeField('item','shadowBlur','Kabur bayang',o.shadowBlur,0,70)+toggleField('item','innerShadow','Inner shadow',o.innerShadow)+rangeField('item','depth3d','3D Text — kedalaman',o.depth3d,0,45)+toggleField('item','reflection','Reflection / pantulan',o.reflection)+toggleField('item','emboss','Emboss / kesan timbul',o.emboss)+`<button class="mini-btn full" data-action="texture">▧ Import tekstur tulisan</button>${o.textureSrc?`<button class="mini-btn full" data-action="clearTexture">× Buang tekstur</button>`:''}`)+transformProps(o)+objectControls(o);}
 function imageInspector(o){return section('▧ Sunting imej',`<div class="action-stack"><button class="mini-btn" data-action="replaceImage">▧ Tukar gambar</button><button class="mini-btn" data-action="cropReset">⟲ Reset crop</button></div><p class="field-help">Crop memotong bahagian imej mengikut peratus dari setiap sisi.</p><div class="grid-two">${numField('item','cropLeft','Crop kiri %',o.cropLeft,0,90)}${numField('item','cropRight','Crop kanan %',o.cropRight,0,90)}${numField('item','cropTop','Crop atas %',o.cropTop,0,90)}${numField('item','cropBottom','Crop bawah %',o.cropBottom,0,90)}</div>`)+section('◉ Kesan gambar',chooseField('item','effect','Image Effects',o.effect,[['none','Normal'],['grayscale','Hitam & putih'],['sepia','Sepia'],['vintage','Vintage'],['invert','Warna songsang']])+rangeField('item','brightness','Kecerahan',o.brightness,0,200)+rangeField('item','contrast','Kontras',o.contrast,0,200)+rangeField('item','saturation','Saturasi',o.saturation,0,200)+rangeField('item','blur','Blur',o.blur,0,16))+
  section('✂ Buang background',`<p class="field-help">Buang warna latar sekata, contohnya putih. Hasil terbaik untuk imej berlatar rata.</p>`+toggleField('item','removeBg','Aktifkan remove background',o.removeBg)+colorField('item','removeColor','Warna yang dibuang',o.removeColor)+rangeField('item','tolerance','Toleransi warna',o.tolerance,5,180))+
@@ -213,7 +330,7 @@ function stickerInspector(o){return section('✨ Pelekat / emoji',`<p class="fie
 function strokeInspector(o){return section('✎ Gaya lukisan',colorField('item','color','Warna garisan',o.color)+rangeField('item','size','Saiz pen',o.size,1,120))+transformProps(o)+objectControls(o);}
 function shapePalette(){return `<div class="tip-line">Tambah bentuk ke kanvas. Pilih objek selepas menambah untuk ubah warna, saiz, outline dan putaran.</div>`+section('Bentuk asas',`<div class="palette-grid">${shapes.map(s=>`<button class="palette-button labelled" data-shape="${s.id}">${s.glyph}<small>${s.label}</small></button>`).join('')}</div>`);}
 function stickerPalette(){return `<div class="tip-line">Pilih stiker atau emoji. Anda boleh seret, putar dan ubah saiz pada kanvas.</div>`+stickerGroups.map(g=>section(g.title,`<div class="palette-grid">${g.items.map(e=>`<button class="palette-button" data-emoji="${e}">${e}</button>`).join('')}</div>`)).join('');}
-function homeInspector(){return `<div class="home-start"><div class="start-mark">✦</div><h3>Mula dengan imej anda</h3><p>Pilih gambar, crop ke nisbah pilihan dan mula menyunting.</p><button class="primary-wide" data-action="openCanvasImage">▧ Buka imej</button><button class="mini-btn full" data-action="quickText">＋ Tambah teks</button></div>`+section('Kanvas',`<div class="canvas-summary"><span>Resolusi</span><strong>${doc.width} × ${doc.height}</strong></div><button class="mini-btn full" data-action="resizeDialog">Ubah saiz kanvas</button>`)+section('Projek',`<div class="action-stack"><button class="mini-btn" data-action="newProject">Projek baru</button><button class="mini-btn" data-action="openProject">Buka JSON</button><button class="mini-btn" data-action="saveProject">Simpan JSON</button><button class="mini-btn" data-action="showExport">Eksport imej</button></div>`);}
+function homeInspector(){return `<div class="home-start"><div class="start-mark">✦</div><h3>Mula dengan imej anda</h3><p>Pilih gambar, crop ke nisbah pilihan dan mula menyunting.</p><button class="primary-wide" data-action="openCanvasImage">▧ Buka imej</button><button class="mini-btn full" data-action="quickText">＋ Tambah teks</button><button class="mini-btn full" data-action="fontLibrary">▤ Pustaka font · Import banyak</button></div>`+section('Kanvas',`<div class="canvas-summary"><span>Resolusi</span><strong>${doc.width} × ${doc.height}</strong></div><button class="mini-btn full" data-action="resizeDialog">Ubah saiz kanvas</button>`)+section('Projek',`<div class="action-stack"><button class="mini-btn" data-action="newProject">Projek baru</button><button class="mini-btn" data-action="openProject">Buka JSON</button><button class="mini-btn" data-action="saveProject">Simpan JSON</button><button class="mini-btn" data-action="showExport">Eksport imej</button></div>`);}
 function layersInspector(){const items=[...doc.items].reverse();return `<div class="layer-toolbar"><button class="mini-btn" data-action="newProject">＋ Baru</button><button class="mini-btn" data-action="openProject">↥ Buka</button><button class="mini-btn" data-action="saveProject">▣ Simpan</button></div><div class="layer-toolbar"><button class="mini-btn" data-action="upLayer">↑ Depan</button><button class="mini-btn" data-action="downLayer">↓ Belakang</button><button class="mini-btn" data-action="duplicate">▢ Salin</button><button class="mini-btn" data-action="delete">⌫</button></div><p class="layer-note">Objek paling atas dalam senarai berada di hadapan pada kanvas. Klik untuk memilih atau gunakan butang anak panah.</p><div class="layer-list">${items.map(o=>`<div class="layer-row ${selectedId===o.id?'selected':''}" data-layer="${escapeHTML(o.id)}"><span class="layer-thumb">${o.type==='image'?`<img src="${escapeHTML(o.src)}" alt="">`:o.type==='sticker'?o.emoji:o.type==='text'?'T':o.type==='shape'?'◯':'✎'}</span><span class="layer-info"><strong>${escapeHTML(o.name||o.type)}</strong><small>${escapeHTML(o.type.toUpperCase())} · ${Math.round(o.w)} × ${Math.round(o.h)}</small></span><span class="layer-actions"><button data-layeraction="toggleVisible" data-id="${escapeHTML(o.id)}" title="Tunjuk atau sembunyi">${o.visible?'◉':'◎'}</button><button data-layeraction="toggleLock" data-id="${escapeHTML(o.id)}" title="Kunci layer">${o.locked?'🔒':'◇'}</button></span></div>`).join('')||'<div class="layer-empty">Belum ada layer</div>'}</div>`;}
 function refreshPanel(){const o=getItem();$('#panelTitle').textContent=activeTab==='layers'?'Layers & susunan':panelMode==='background'?'Background':panelMode==='shape'?'Tambah bentuk':panelMode==='sticker'?'Stiker & emoji':panelMode==='draw'?'Alat lukisan':o?(o.type==='text'?'Editor teks':o.type==='image'?'Editor gambar':o.type==='shape'?'Editor bentuk':o.type==='sticker'?'Editor stiker':'Editor lukisan'):'Editor';$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));$('#layerCount').textContent=doc.items.length;
  let html;if(activeTab==='layers')html=layersInspector();else if(panelMode==='background')html=bgInspector();else if(panelMode==='shape')html=shapePalette();else if(panelMode==='sticker')html=stickerPalette();else if(panelMode==='draw')html=drawInspector();else if(o){html=o.type==='text'?textInspector(o):o.type==='image'?imageInspector(o):o.type==='shape'?shapeInspector(o):o.type==='sticker'?stickerInspector(o):strokeInspector(o);}else html=homeInspector();panel.innerHTML=html;}
@@ -247,12 +364,12 @@ function changeBound(el,final=false){
  if(scope==='bg'&&key.startsWith('color')&&doc.background.type==='transparent')doc.background.type='color';
  if(scope==='item'&&key==='text')target.name=val.split('\n')[0].slice(0,35)||'Teks';
  if(scope==='item'&&(key==='removeColor'||key==='tolerance'))transparentCache.clear();
- if(key==='font')document.fonts.ready.then(render);
+ if(key==='font'){const font=fontLibrary.get(val);if(font&&scope==='item'&&target.type==='text'){if(!Array.isArray(doc.customFonts))doc.customFonts=[];if(!doc.customFonts.some(f=>f.family===font.family))doc.customFonts.push({family:font.family,name:font.name});}document.fonts.ready.then(render);}
  const read=el.closest('.field')?.querySelector('.range-value');if(read)read.textContent=typeof val==='number'&&!Number.isInteger(val)?val.toFixed(2):val;
  const colorTxt=el.closest('.color-field')?.querySelector('span');if(colorTxt)colorTxt.textContent=val;
  render();if(scope!=='brush'){if(final)commit();else delayedCommit();}
 }
-function performAction(a){const o=getItem();switch(a){case'newProject':newProject();break;case'openProject':$('#fileProject').click();break;case'saveProject':saveProject();break;case'showExport':showExportModal();break;case'quickText':selectTool('text');break;case'quickShape':selectTool('shape');break;case'quickImage':selectTool('image');break;case'openCanvasImage':pendingImportMode='canvas';$('#fileImage').click();break;case'quickBackground':selectTool('background');break;case'duplicate':duplicateItem();break;case'delete':removeItem();break;case'upLayer':shiftLayer(1);break;case'downLayer':shiftLayer(-1);break;case'lock':if(o){o.locked=!o.locked;commit();refreshPanel();render();}break;case'visible':if(o){o.visible=!o.visible;commit();refreshPanel();render();}break;case'alignH':if(o){o.x=doc.width/2;commit();refreshPanel();render();}break;case'alignV':if(o){o.y=doc.height/2;commit();refreshPanel();render();}break;case'flipH':if(o){o.flipX=!o.flipX;commit();refreshPanel();render();}break;case'replaceImage':pendingImportMode='replace';$('#fileImage').click();break;case'cropReset':if(o){o.cropLeft=o.cropRight=o.cropTop=o.cropBottom=0;commit();refreshPanel();render();}break;case'texture':$('#fileTexture').click();break;case'importFont':$('#fileFont').click();break;case'clearTexture':if(o){o.textureSrc='';commit();refreshPanel();render();}break;case'bgImage':$('#fileBackground').click();break;case'endDraw':selectTool('select');break;case'resizeDialog':showResizeModal();break;}}
+function performAction(a){const o=getItem();switch(a){case'newProject':newProject();break;case'openProject':$('#fileProject').click();break;case'saveProject':saveProject();break;case'showExport':showExportModal();break;case'quickText':selectTool('text');break;case'quickShape':selectTool('shape');break;case'quickImage':selectTool('image');break;case'openCanvasImage':pendingImportMode='canvas';$('#fileImage').click();break;case'quickBackground':selectTool('background');break;case'duplicate':duplicateItem();break;case'delete':removeItem();break;case'upLayer':shiftLayer(1);break;case'downLayer':shiftLayer(-1);break;case'lock':if(o){o.locked=!o.locked;commit();refreshPanel();render();}break;case'visible':if(o){o.visible=!o.visible;commit();refreshPanel();render();}break;case'alignH':if(o){o.x=doc.width/2;commit();refreshPanel();render();}break;case'alignV':if(o){o.y=doc.height/2;commit();refreshPanel();render();}break;case'flipH':if(o){o.flipX=!o.flipX;commit();refreshPanel();render();}break;case'replaceImage':pendingImportMode='replace';$('#fileImage').click();break;case'cropReset':if(o){o.cropLeft=o.cropRight=o.cropTop=o.cropBottom=0;commit();refreshPanel();render();}break;case'texture':$('#fileTexture').click();break;case'importFont':$('#fileFont').click();break;case'fontLibrary':showFontLibrary();break;case'clearTexture':if(o){o.textureSrc='';commit();refreshPanel();render();}break;case'bgImage':$('#fileBackground').click();break;case'endDraw':selectTool('select');break;case'resizeDialog':showResizeModal();break;}}
 function handlePanelClick(ev){const rel=ev.target.closest('[data-relative]');if(rel){const slider=panel.querySelector('[data-key="relativeSize"]');if(slider){slider.value=rel.dataset.relative;changeBound(slider,true);refreshPanel();}return;}const a=ev.target.closest('[data-action]');if(a){performAction(a.dataset.action);return;}const shape=ev.target.closest('[data-shape]');if(shape){addObject(createShape(shape.dataset.shape));return;}const e=ev.target.closest('[data-emoji]');if(e){if(getItem()?.type==='sticker'&&panelMode==='object'){getItem().emoji=e.dataset.emoji;getItem().name='Stiker '+e.dataset.emoji;commit();render();}else addObject(createSticker(e.dataset.emoji));return;}const bgtype=ev.target.closest('[data-bgtype]');if(bgtype){doc.background.type=bgtype.dataset.bgtype;if(bgtype.dataset.bgtype==='image'&&!doc.background.src)$('#fileBackground').click();commit();refreshPanel();render();return;}const bgcol=ev.target.closest('[data-bgcolor]');if(bgcol){doc.background.color=bgcol.dataset.bgcolor;doc.background.type='color';commit();refreshPanel();render();return;}const set=ev.target.closest('[data-set]');if(set){const o=getItem();if(o){o[set.dataset.set]=set.dataset.val;commit();refreshPanel();render();}return;}const layeraction=ev.target.closest('[data-layeraction]');if(layeraction){const o=doc.items.find(i=>i.id===layeraction.dataset.id);if(o){if(layeraction.dataset.layeraction==='toggleVisible')o.visible=!o.visible;else o.locked=!o.locked;commit();refreshPanel();render();}return;}const layer=ev.target.closest('[data-layer]');if(layer){selectedId=layer.dataset.layer;refreshPanel();render();}}
 function loadImageFile(file,usage){
  if(!file)return;if(!file.type.startsWith('image/')){toast('Pilih fail imej');return;}
@@ -339,14 +456,16 @@ function openCropImport(im,file,usage='item'){
  setPreset('original');
 }
 function newProject(){showModal('Cipta projek baharu',`<p class="muted">Pilih kanvas kosong atau mula dengan susun atur contoh.</p><div class="grid-two"><div class="field"><label>Lebar (px)</label><input id="newW" type="number" value="1080" min="100" max="5000"></div><div class="field"><label>Tinggi (px)</label><input id="newH" type="number" value="1080" min="100" max="5000"></div></div><div class="modal-actions"><button id="newBlank" class="btn primary">▢ Kanvas kosong</button><button id="newDemo" class="btn secondary">✦ Guna contoh</button></div>`);const make=(demo)=>{doc={name:'Projek Baharu',width:clamp(asNum($('#newW').value,1080),100,5000),height:clamp(asNum($('#newH').value,1080),100,5000),background:{type:'color',color:'#ffffff',color2:'#a17aff',angle:35,src:''},items:[]};selectedId=null;if(demo){doc.background.type='gradient';doc.background.color='#0f1231';doc.background.color2='#31235e';defaultScene();}$('#projectName').value=doc.name;canvas.width=doc.width;canvas.height=doc.height;history=[];historyIndex=-1;commit();syncPreset();fitCanvas();panelMode=demo?'object':'home';refreshPanel();render();hideModal();toast('Projek baharu dicipta');};$('#newBlank').onclick=()=>make(false);$('#newDemo').onclick=()=>make(true);}
-function init(){
+async function init(){
  setTheme(document.documentElement.getAttribute('data-theme') || 'light', false);
  $('#themeToggle').addEventListener('click', () => {
    setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
  });
- try{const saved=localStorage.getItem('pixellab-studio-v1');if(saved){const data=JSON.parse(saved);if(data.width>0&&data.height>0&&Array.isArray(data.items)){doc=data;selectedId=null;}else {doc.items=[];selectedId=null;}}else {doc.items=[];selectedId=null;}}catch(e){doc.items=[];selectedId=null;}
- loadProjectFonts();canvas.width=doc.width;canvas.height=doc.height;$('#projectName').value=doc.name||'Reka Bentuk Saya';syncPreset();history=[snapshot()];historyIndex=0;updateHistoryUI();refreshPanel();fitCanvas();render();updateToolUI();
+ await loadInstalledFonts();
+ try{const saved=await storedAutosave();if(saved){const data=JSON.parse(saved);if(data.width>0&&data.height>0&&Array.isArray(data.items)){doc=data;selectedId=null;}else {doc.items=[];selectedId=null;}}else {doc.items=[];selectedId=null;}}catch(e){doc.items=[];selectedId=null;}
+ await loadProjectFonts(true);canvas.width=doc.width;canvas.height=doc.height;$('#projectName').value=doc.name||'Reka Bentuk Saya';syncPreset();history=[snapshot()];historyIndex=0;updateHistoryUI();refreshPanel();fitCanvas();render();updateToolUI();
  $$('.tool[data-tool]').forEach(b=>b.addEventListener('click',()=>selectTool(b.dataset.tool)));
+ $('#fontLibraryBtn').addEventListener('click',showFontLibrary);
  $$('.tab').forEach(b=>b.addEventListener('click',()=>{activeTab=b.dataset.tab;if(activeTab==='properties'&&panelMode==='layers')panelMode=getItem()?'object':'home';refreshPanel();showPanel();}));
  panel.addEventListener('click',handlePanelClick);
  panel.addEventListener('input',ev=>{const el=ev.target;if(el.dataset.key){changeBound(el,false);}});
@@ -360,7 +479,7 @@ function init(){
  $('#openImageBtn').onclick=()=>{pendingImportMode='canvas';$('#fileImage').click();};$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;$('#saveBtn').onclick=saveProject;$('#openBtn').onclick=()=>$('#fileProject').click();$('#newBtn').onclick=newProject;$('#exportBtn').onclick=showExportModal;
  $('#zoomIn').onclick=()=>setZoom(zoom+.25);$('#zoomOut').onclick=()=>setZoom(zoom-.25);$('#zoomFit').onclick=()=>setZoom(1);
  $('#presetSelect').onchange=ev=>{if(ev.target.value==='custom'){showResizeModal();return;}const [w,h]=ev.target.value.split('x').map(Number);resizeDoc(w,h);};
- $('#fileImage').onchange=ev=>{loadImageFile(ev.target.files?.[0],pendingImportMode==='replace'?'replace':'item');ev.target.value='';};$('#fileBackground').onchange=ev=>{loadImageFile(ev.target.files?.[0],'bg');ev.target.value='';};$('#fileTexture').onchange=ev=>{loadImageFile(ev.target.files?.[0],'texture');ev.target.value='';};$('#fileFont').onchange=ev=>{importFontFile(ev.target.files?.[0]);ev.target.value='';};$('#fileProject').onchange=ev=>{onProjectFile(ev.target.files?.[0]);ev.target.value='';};
+ $('#fileImage').onchange=ev=>{loadImageFile(ev.target.files?.[0],pendingImportMode==='replace'?'replace':'item');ev.target.value='';};$('#fileBackground').onchange=ev=>{loadImageFile(ev.target.files?.[0],'bg');ev.target.value='';};$('#fileTexture').onchange=ev=>{loadImageFile(ev.target.files?.[0],'texture');ev.target.value='';};$('#fileFont').onchange=ev=>{const files=Array.from(ev.target.files||[]);ev.target.value='';importFontFiles(files);};$('#fileProject').onchange=ev=>{onProjectFile(ev.target.files?.[0]);ev.target.value='';};
  $('#closePanel').onclick=closePanel;$('#modalClose').onclick=hideModal;$('.modal-backdrop').onclick=hideModal;
  $('#helpBtn').onclick=()=>showModal('Panduan PixelLab Studio',`<div class="tip-line"><strong>1. Buka imej</strong><p>Klik Buka imej, pilih ratio crop, seret bingkai dan buka sebagai kanvas atau layer.</p><strong>2. Tambah objek</strong><p>Pilih Teks, Gambar, Bentuk, Stiker atau Lukis pada bar alat.</p><strong>2. Ubah objek</strong><p>Sentuh objek, seret untuk pindah, gunakan bucu untuk resize dan pemegang bulat untuk putar.</p><strong>3. Urus layers</strong><p>Gunakan tab Layers untuk memilih, mengunci, menyusun atau menyembunyikan objek.</p><strong>4. Simpan / eksport</strong><p>Gunakan Simpan untuk projek JSON yang boleh diedit semula. Eksport untuk PNG, JPG atau WebP.</p></div><p class="muted">Projek cuba disimpan secara automatik pada browser ini. Simpan fail JSON juga sebagai salinan sandaran.</p>`);
  window.addEventListener('keydown',ev=>{const tag=(document.activeElement?.tagName||'').toLowerCase();if(['input','textarea','select'].includes(tag))return;if(!$('#modalShell').hidden){if(ev.key==='Escape')hideModal();return;}if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();ev.shiftKey?redo():undo();}else if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='y'){ev.preventDefault();redo();}else if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='d'){ev.preventDefault();duplicateItem();}else if((ev.key==='Delete'||ev.key==='Backspace')&&getItem()){ev.preventDefault();removeItem();}else if(ev.key==='Escape'){pickSelected(null);closePanel();}else if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.key)&&getItem()&&!getItem().locked){ev.preventDefault();const o=getItem(),n=ev.shiftKey?10:1;if(ev.key==='ArrowUp')o.y-=n;if(ev.key==='ArrowDown')o.y+=n;if(ev.key==='ArrowLeft')o.x-=n;if(ev.key==='ArrowRight')o.x+=n;commit();render();}});

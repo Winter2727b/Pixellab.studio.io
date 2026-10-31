@@ -48,6 +48,7 @@
       <button class="tool" data-tool="draw" title="Lukis di kanvas"><span class="tool-icon">✎</span><span>Lukis</span></button>
       <button class="tool" data-tool="background" title="Ubah latar"><span class="tool-icon">▦</span><span>Latar</span></button>
       <div class="rail-separator"></div>
+      <button class="tool" id="fontLibraryBtn" title="Pustaka font · import banyak font"><span class="tool-icon serif">Aa</span><span>Font</span></button>
       <button class="tool" data-tool="layers" title="Urus layer"><span class="tool-icon">▱</span><span>Layers</span></button>
       <div class="rail-bottom"><button class="tool" id="helpBtn" title="Panduan ringkas"><span class="tool-icon">?</span><span>Bantuan</span></button></div>
     </aside>
@@ -62,7 +63,7 @@
       <div class="panel-head"><div class="panel-title"><span class="panel-overline">PIXELLAB EDITOR</span><h2 id="panelTitle">Editor</h2></div><button class="close-panel" id="closePanel" aria-label="Tutup panel">×</button></div>
       <div class="tabbar" role="tablist"><button class="tab active" data-tab="properties">⚙ Properti</button><button class="tab" data-tab="layers">▱ Layers <span class="count" id="layerCount">0</span></button></div>
       <div class="panel-body" id="panelBody"></div>
-      <div class="panel-bottom"><span>PixelLab Studio</span><span>Editor • v2.2</span></div>
+      <div class="panel-bottom"><span>PixelLab Studio</span><span>Editor • v2.3</span></div>
     </aside>
   </div>
   <div class="mobile-pane-hint" id="mobileHint">Pilih alat untuk mula berkarya</div>
@@ -72,7 +73,7 @@
 <input type="file" id="fileImage" accept="image/*" hidden>
 <input type="file" id="fileBackground" accept="image/*" hidden>
 <input type="file" id="fileTexture" accept="image/*" hidden>
-<input type="file" id="fileFont" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" hidden>
+<input type="file" id="fileFont" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2" multiple hidden>
 <input type="file" id="fileProject" accept=".json,application/json" hidden>
 <script src="app.js"></script>
 </body>
