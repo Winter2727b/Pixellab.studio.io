@@ -19,7 +19,7 @@ function setTheme(theme, persist = true) {
     toggle.querySelector('.theme-label').textContent = dark ? 'Cerah' : 'Gelap';
   }
   const themeMeta = $('meta[name="theme-color"]');
-  if (themeMeta) themeMeta.content = dark ? '#141925' : '#ffffff';
+  if (themeMeta) themeMeta.content = dark ? '#141925' : '#dfe6ea';
   if (persist) {
     try { localStorage.setItem(themeStorageKey, dark ? 'dark' : 'light'); }
     catch (e) { /* Switching still works when storage is unavailable. */ }
@@ -236,7 +236,7 @@ function updateToolUI(){$$('.tool[data-tool]').forEach(b=>b.classList.toggle('ac
 function showPanel(){if(innerWidth<=680)$('#inspector').classList.add('open');}
 function closePanel(){$('#inspector').classList.remove('open');}
 function getScale(){const w=Math.max(80,stage.clientWidth-42),h=Math.max(80,stage.clientHeight-42);return Math.min(w/doc.width,h/doc.height,1.8);}
-function fitCanvas(){const s=getScale()*zoom;canvas.style.width=(doc.width*s)+'px';canvas.style.height=(doc.height*s)+'px';$('#zoomValue').textContent=Math.round(zoom*100)+'%';const dims=$('#stageDims');if(dims)dims.textContent=doc.width+' × '+doc.height;}
+function fitCanvas(){const s=getScale()*zoom;canvas.style.width=(doc.width*s)+'px';canvas.style.height=(doc.height*s)+'px';$('#zoomValue').value=String(Math.round(zoom*100));const dims=$('#stageDims');if(dims)dims.textContent=doc.width+' × '+doc.height;}
 function setZoom(z){zoom=clamp(z,.4,3);fitCanvas();}
 function getPoint(ev){const box=canvas.getBoundingClientRect();return {x:(ev.clientX-box.left)*doc.width/box.width,y:(ev.clientY-box.top)*doc.height/box.height};}
 function localPoint(p,o){const dx=p.x-o.x,dy=p.y-o.y,a=-rad(o.rotation||0);return{x:dx*Math.cos(a)-dy*Math.sin(a),y:dx*Math.sin(a)+dy*Math.cos(a)};}
@@ -308,14 +308,17 @@ function renderScene(c,editing=true){c.save();drawBackground(c,editing);for(cons
 let renderScheduled=false;function render(){if(renderScheduled)return;renderScheduled=true;requestAnimationFrame(()=>{renderScheduled=false;ctx.clearRect(0,0,canvas.width,canvas.height);renderScene(ctx,true);});}
 // ---------- Property editor ----------
 function propAttr(scope,key){return `data-scope="${scope}" data-key="${escapeHTML(key)}"`;}
-function rangeField(scope,key,label,value,min,max,step=1,suffix=''){return `<div class="field"><label>${label}</label><div class="with-number"><input type="range" ${propAttr(scope,key)} min="${min}" max="${max}" step="${step}" value="${value}"><span class="range-value" data-read="${key}">${Number.isInteger(+value)?value:(+value).toFixed(2)}${suffix}</span></div></div>`;}
+// All slider properties have an editable keyboard input. Editing finishes on Enter / Tab / blur.
+function rangeField(scope,key,label,value,min,max,step=1,suffix=''){
+ return `<div class="field"><label>${escapeHTML(label)}</label><div class="with-number"><input type="range" ${propAttr(scope,key)} min="${min}" max="${max}" step="${step}" value="${value}" aria-label="${escapeHTML(label)} — slider"><div class="number-wrap"><input class="range-number" type="number" inputmode="decimal" ${propAttr(scope,key)} min="${min}" max="${max}" step="${step}" value="${value}" aria-label="${escapeHTML(label)} — taip nombor" title="Taip nombor dan tekan Enter">${suffix?`<span class="number-unit">${escapeHTML(suffix)}</span>`:''}</div></div></div>`;
+}
 function numField(scope,key,label,value,min=-99999,max=99999,step=1){return `<div class="field"><label>${label}</label><input type="number" ${propAttr(scope,key)} min="${min}" max="${max}" step="${step}" value="${value}"></div>`;}
 function textField(scope,key,label,value,multiline=false){return `<div class="field"><label>${label}</label>${multiline?`<textarea ${propAttr(scope,key)} rows="3">${escapeHTML(value)}</textarea>`:`<input type="text" ${propAttr(scope,key)} value="${escapeHTML(value)}">`}</div>`;}
 function colorField(scope,key,label,value){return `<div class="field"><label>${label}</label><div class="color-field"><input type="color" ${propAttr(scope,key)} value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><span>${escapeHTML(value)}</span></div></div>`;}
 function chooseField(scope,key,label,value,opts){return `<div class="field"><label>${label}</label><select ${propAttr(scope,key)}>${opts.map(([v,l])=>`<option value="${escapeHTML(v)}" ${v===value?'selected':''}>${escapeHTML(l)}</option>`).join('')}</select></div>`;}
 function toggleField(scope,key,label,value){return `<div class="inline-field"><label>${label}</label><input class="switch" type="checkbox" ${propAttr(scope,key)} ${value?'checked':''} aria-label="${escapeHTML(label)}"></div>`;}
 function section(title,inner,note=''){return `<section class="field-section"><h3 class="section-title">${title}${note?`<span class="section-note">${note}</span>`:''}</h3>${inner}</section>`;}
-function transformProps(o){return section('Saiz & posisi',`<label class="ratio-check"><input type="checkbox" class="switch" data-scope="item" data-key="maintainRatio" ${(o.maintainRatio??o.type==='image')?'checked':''}><span>Maintain Ratio <small>· kekalkan nisbah semasa resize</small></span></label><div class="field relative-size-field"><label>Relative Size <strong>${Math.round(o.relativeSize||100)}%</strong></label><input type="range" ${propAttr('item','relativeSize')} min="10" max="300" step="1" value="${Math.round(o.relativeSize||100)}"><div class="relative-presets"><button data-relative="50">50%</button><button data-relative="75">75%</button><button data-relative="100">100%</button><button data-relative="150">150%</button></div></div><div class="grid-two">${numField('item','w','Lebar (px)',Math.round(o.w),20,5000)}${numField('item','h','Tinggi (px)',Math.round(o.h),20,5000)}${numField('item','x','Posisi X',Math.round(o.x))}${numField('item','y','Posisi Y',Math.round(o.y))}</div>${rangeField('item','rotation','Putaran (°)',o.rotation||0,-180,180)}${rangeField('item','opacity','Kelegapan',o.opacity??1,0,1,.01)}<div class="action-stack"><button class="mini-btn" data-action="alignH">↔ Tengah H</button><button class="mini-btn" data-action="alignV">↕ Tengah V</button><button class="mini-btn" data-action="flipH">⇆ Cermin</button><button class="mini-btn" data-action="duplicate">▢ Gandakan</button></div>`);}
+function transformProps(o){return section('Saiz & posisi',`<label class="ratio-check"><input type="checkbox" class="switch" data-scope="item" data-key="maintainRatio" ${(o.maintainRatio??o.type==='image')?'checked':''}><span>Maintain Ratio <small>· kekalkan nisbah semasa resize</small></span></label><div class="field relative-size-field"><label>Relative Size <strong>${Math.round(o.relativeSize??100)}%</strong></label><div class="with-number"><input type="range" ${propAttr('item','relativeSize')} min="10" max="300" step="1" value="${clamp(Math.round(o.relativeSize??100),10,300)}" aria-label="Relative Size — slider"><div class="number-wrap"><input class="range-number" type="number" inputmode="numeric" ${propAttr('item','relativeSize')} min="10" max="300" step="1" value="${clamp(Math.round(o.relativeSize??100),10,300)}" aria-label="Relative Size — taip peratus"><span class="number-unit">%</span></div></div><div class="relative-presets"><button data-relative="50">50%</button><button data-relative="75">75%</button><button data-relative="100">100%</button><button data-relative="150">150%</button></div></div><div class="grid-two">${numField('item','w','Lebar (px)',Math.round(o.w),20,5000)}${numField('item','h','Tinggi (px)',Math.round(o.h),20,5000)}${numField('item','x','Posisi X',Math.round(o.x))}${numField('item','y','Posisi Y',Math.round(o.y))}</div>${rangeField('item','rotation','Putaran (°)',o.rotation||0,-180,180)}${rangeField('item','opacity','Kelegapan',o.opacity??1,0,1,.01)}<div class="action-stack"><button class="mini-btn" data-action="alignH">↔ Tengah H</button><button class="mini-btn" data-action="alignV">↕ Tengah V</button><button class="mini-btn" data-action="flipH">⇆ Cermin</button><button class="mini-btn" data-action="duplicate">▢ Gandakan</button></div>`);}
 function objectControls(o){return section('▱ Susunan layer',`<div class="action-stack"><button class="mini-btn" data-action="upLayer">↑ Ke depan</button><button class="mini-btn" data-action="downLayer">↓ Ke belakang</button><button class="mini-btn" data-action="lock">${o.locked?'🔓 Buka kunci':'🔒 Kunci objek'}</button><button class="mini-btn" data-action="visible">${o.visible?'◉ Sembunyi':'◎ Tunjuk'}</button><button class="mini-btn danger full" data-action="delete">⌫ Padam objek</button></div>`);}
 function textInspector(o){return section('✎ Kandungan teks',textField('item','text','Edit Text',o.text,true)+chooseField('item','font','Jenis font',o.font,projectFontOptions())+`<button class="mini-btn full" type="button" data-action="importFont">＋ Import banyak font · TTF / OTF / WOFF / WOFF2</button><button class="mini-btn full" type="button" data-action="fontLibrary">▤ Pustaka font yang tersimpan</button><p class="field-help">Import banyak fail serentak. Font kekal dalam pelayar dan disertakan dalam projek JSON apabila digunakan.</p><div class="grid-two">${chooseField('item','weight','Ketebalan',o.weight,[['400','Regular'],['600','Semibold'],['700','Bold'],['900','Extra Bold']])}${toggleField('item','italic','Italic',o.italic)}</div>`)+section('Aa Tipografi',rangeField('item','fontSize','Saiz tulisan',o.fontSize,12,400)+rangeField('item','letterSpacing','Jarak huruf',o.letterSpacing,-10,45)+`<div class="field"><label>Align — penjajaran</label><div class="segmented">${[['left','≡ Kiri'],['center','≡ Tengah'],['right','≡ Kanan']].map(([v,l])=>`<button data-set="align" data-val="${v}" class="${o.align===v?'active':''}">${l}</button>`).join('')}</div></div>`+rangeField('item','curve','Curve — lengkung tulisan',o.curve,-100,100))+
  section('🎨 Warna & efek',`<div class="grid-two">${colorField('item','color','Warna teks',o.color)}${colorField('item','color2','Warna kedua',o.color2)}</div>`+toggleField('item','gradient','Gradient dua warna',o.gradient)+rangeField('item','strokeWidth','Stroke / outline',o.strokeWidth,0,30)+colorField('item','strokeColor','Warna outline',o.strokeColor)+toggleField('item','shadow','Shadow',o.shadow)+colorField('item','shadowColor','Warna bayang',o.shadowColor)+`<div class="grid-two">${numField('item','shadowX','Bayang X',o.shadowX,-150,150)}${numField('item','shadowY','Bayang Y',o.shadowY,-150,150)}</div>`+rangeField('item','shadowBlur','Kabur bayang',o.shadowBlur,0,70)+toggleField('item','innerShadow','Inner shadow',o.innerShadow)+rangeField('item','depth3d','3D Text — kedalaman',o.depth3d,0,45)+toggleField('item','reflection','Reflection / pantulan',o.reflection)+toggleField('item','emboss','Emboss / kesan timbul',o.emboss)+`<button class="mini-btn full" data-action="texture">▧ Import tekstur tulisan</button>${o.textureSrc?`<button class="mini-btn full" data-action="clearTexture">× Buang tekstur</button>`:''}`)+transformProps(o)+objectControls(o);}
@@ -334,38 +337,67 @@ function homeInspector(){return `<div class="home-start"><div class="start-mark"
 function layersInspector(){const items=[...doc.items].reverse();return `<div class="layer-toolbar"><button class="mini-btn" data-action="newProject">＋ Baru</button><button class="mini-btn" data-action="openProject">↥ Buka</button><button class="mini-btn" data-action="saveProject">▣ Simpan</button></div><div class="layer-toolbar"><button class="mini-btn" data-action="upLayer">↑ Depan</button><button class="mini-btn" data-action="downLayer">↓ Belakang</button><button class="mini-btn" data-action="duplicate">▢ Salin</button><button class="mini-btn" data-action="delete">⌫</button></div><p class="layer-note">Objek paling atas dalam senarai berada di hadapan pada kanvas. Klik untuk memilih atau gunakan butang anak panah.</p><div class="layer-list">${items.map(o=>`<div class="layer-row ${selectedId===o.id?'selected':''}" data-layer="${escapeHTML(o.id)}"><span class="layer-thumb">${o.type==='image'?`<img src="${escapeHTML(o.src)}" alt="">`:o.type==='sticker'?o.emoji:o.type==='text'?'T':o.type==='shape'?'◯':'✎'}</span><span class="layer-info"><strong>${escapeHTML(o.name||o.type)}</strong><small>${escapeHTML(o.type.toUpperCase())} · ${Math.round(o.w)} × ${Math.round(o.h)}</small></span><span class="layer-actions"><button data-layeraction="toggleVisible" data-id="${escapeHTML(o.id)}" title="Tunjuk atau sembunyi">${o.visible?'◉':'◎'}</button><button data-layeraction="toggleLock" data-id="${escapeHTML(o.id)}" title="Kunci layer">${o.locked?'🔒':'◇'}</button></span></div>`).join('')||'<div class="layer-empty">Belum ada layer</div>'}</div>`;}
 function refreshPanel(){const o=getItem();$('#panelTitle').textContent=activeTab==='layers'?'Layers & susunan':panelMode==='background'?'Background':panelMode==='shape'?'Tambah bentuk':panelMode==='sticker'?'Stiker & emoji':panelMode==='draw'?'Alat lukisan':o?(o.type==='text'?'Editor teks':o.type==='image'?'Editor gambar':o.type==='shape'?'Editor bentuk':o.type==='sticker'?'Editor stiker':'Editor lukisan'):'Editor';$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));$('#layerCount').textContent=doc.items.length;
  let html;if(activeTab==='layers')html=layersInspector();else if(panelMode==='background')html=bgInspector();else if(panelMode==='shape')html=shapePalette();else if(panelMode==='sticker')html=stickerPalette();else if(panelMode==='draw')html=drawInspector();else if(o){html=o.type==='text'?textInspector(o):o.type==='image'?imageInspector(o):o.type==='shape'?shapeInspector(o):o.type==='sticker'?stickerInspector(o):strokeInspector(o);}else html=homeInspector();panel.innerHTML=html;}
+// Sync controls sharing the same property (slider + typed number).
+function syncNumericControls(el,value){
+ const group=el.closest('.field');
+ if(!group)return;
+ group.querySelectorAll('[data-scope][data-key]').forEach(other=>{
+   if(other.dataset.scope===el.dataset.scope && other.dataset.key===el.dataset.key &&
+      ['number','range'].includes(other.type)) other.value=value;
+ });
+}
 function changeBound(el,final=false){
  const scope=el.dataset.scope,key=el.dataset.key;if(!scope||!key)return;
  const target=scope==='item'?getItem():scope==='bg'?doc.background:scope==='brush'?brush:doc;if(!target)return;
- let val=el.type==='checkbox'?el.checked:['range','number'].includes(el.type)?asNum(el.value,target[key]):el.value;
+ let val;
+ if(el.type==='checkbox') val=el.checked;
+ else if(['range','number'].includes(el.type)){
+   const raw=el.value.trim();
+   val=raw!=='' && Number.isFinite(Number(raw)) ? Number(raw) : (Number(target[key])||0);
+   // Limits apply to both range and keyboard input, including decimal values.
+   if(el.hasAttribute('min'))val=Math.max(Number(el.min),val);
+   if(el.hasAttribute('max'))val=Math.min(Number(el.max),val);
+   if(el.type==='number')el.value=String(val);
+   syncNumericControls(el,val);
+ }else val=el.value;
  if(key==='opacity')val=clamp(val,0,1);
- if(/^crop/.test(key)){val=clamp(val,0,90);const other={cropLeft:'cropRight',cropRight:'cropLeft',cropTop:'cropBottom',cropBottom:'cropTop'}[key];if(target[other]+val>95)val=95-target[other];el.value=val;}
- if(scope==='doc'&&(key==='width'||key==='height')){if(final){const w=key==='width'?clamp(val,100,5000):doc.width,h=key==='height'?clamp(val,100,5000):doc.height;resizeDoc(w,h);refreshPanel();}return;}
+ if(/^crop/.test(key)){
+   val=clamp(val,0,90);
+   const other={cropLeft:'cropRight',cropRight:'cropLeft',cropTop:'cropBottom',cropBottom:'cropTop'}[key];
+   if(target[other]+val>95)val=95-target[other];
+   syncNumericControls(el,val);
+ }
+ if(scope==='doc'&&(key==='width'||key==='height')){
+   if(final){const w=key==='width'?clamp(Math.round(val),100,5000):doc.width,h=key==='height'?clamp(Math.round(val),100,5000):doc.height;resizeDoc(w,h);refreshPanel();}
+   return;
+ }
  if(scope==='item'&&key==='relativeSize'){
-   val=clamp(Math.round(val),10,300);if(!target.referenceW){target.referenceW=target.w;target.referenceH=target.h;}
+   val=clamp(Math.round(val),10,300);
+   if(!target.referenceW){target.referenceW=target.w;target.referenceH=target.h;}
    target.relativeSize=val;target.w=Math.max(20,target.referenceW*val/100);target.h=Math.max(20,target.referenceH*val/100);
    const show=panel.querySelector('.relative-size-field strong');if(show)show.textContent=val+'%';
-   panel.querySelector('[data-key="w"]')?.setAttribute('value',String(Math.round(target.w)));
-   panel.querySelector('[data-key="h"]')?.setAttribute('value',String(Math.round(target.h)));
-   const w=panel.querySelector('[data-key="w"]'),h=panel.querySelector('[data-key="h"]');if(w)w.value=Math.round(target.w);if(h)h.value=Math.round(target.h);
+   syncNumericControls(el,val);
+   const w=panel.querySelector('[data-key="w"]'),h=panel.querySelector('[data-key="h"]');
+   if(w)w.value=Math.round(target.w);if(h)h.value=Math.round(target.h);
  }else if(scope==='item'&&(key==='w'||key==='h')){
    val=clamp(val,20,5000);const rw=target.w,rh=target.h;
    if(target.maintainRatio??target.type==='image'){
      const ratio=rw/Math.max(1,rh);
      if(key==='w')target.h=clamp(val/ratio,20,5000);else target.w=clamp(val*ratio,20,5000);
-     const other=panel.querySelector(`[data-key="${key==='w'?'h':'w'}"]`);if(other)other.value=Math.round(key==='w'?target.h:target.w);
+     const other=panel.querySelector(`[data-key="${key==='w'?'h':'w'}"]`);
+     if(other)other.value=Math.round(key==='w'?target.h:target.w);
    }
    target[key]=val;if(!target.referenceW){target.referenceW=rw;target.referenceH=rh;}
    target.relativeSize=Math.round(target.w/target.referenceW*100);
    const label=panel.querySelector('.relative-size-field strong');if(label)label.textContent=target.relativeSize+'%';
-   const rel=panel.querySelector('[data-key="relativeSize"]');if(rel)rel.value=clamp(target.relativeSize,10,300);
+   const rel=panel.querySelector('.relative-size-field input[type="range"]');
+   if(rel){rel.value=clamp(target.relativeSize,10,300);syncNumericControls(rel,clamp(target.relativeSize,10,300));}
  }else{target[key]=val;}
  if(scope==='doc'&&key==='name')$('#projectName').value=val;
  if(scope==='bg'&&key.startsWith('color')&&doc.background.type==='transparent')doc.background.type='color';
  if(scope==='item'&&key==='text')target.name=val.split('\n')[0].slice(0,35)||'Teks';
  if(scope==='item'&&(key==='removeColor'||key==='tolerance'))transparentCache.clear();
  if(key==='font'){const font=fontLibrary.get(val);if(font&&scope==='item'&&target.type==='text'){if(!Array.isArray(doc.customFonts))doc.customFonts=[];if(!doc.customFonts.some(f=>f.family===font.family))doc.customFonts.push({family:font.family,name:font.name});}document.fonts.ready.then(render);}
- const read=el.closest('.field')?.querySelector('.range-value');if(read)read.textContent=typeof val==='number'&&!Number.isInteger(val)?val.toFixed(2):val;
  const colorTxt=el.closest('.color-field')?.querySelector('span');if(colorTxt)colorTxt.textContent=val;
  render();if(scope!=='brush'){if(final)commit();else delayedCommit();}
 }
@@ -468,7 +500,8 @@ async function init(){
  $('#fontLibraryBtn').addEventListener('click',showFontLibrary);
  $$('.tab').forEach(b=>b.addEventListener('click',()=>{activeTab=b.dataset.tab;if(activeTab==='properties'&&panelMode==='layers')panelMode=getItem()?'object':'home';refreshPanel();showPanel();}));
  panel.addEventListener('click',handlePanelClick);
- panel.addEventListener('input',ev=>{const el=ev.target;if(el.dataset.key){changeBound(el,false);}});
+ panel.addEventListener('input',ev=>{const el=ev.target;if(el.dataset.key && el.type!=='number'){changeBound(el,false);}});
+ panel.addEventListener('keydown',ev=>{if(ev.target.matches('input[type=number][data-key]')){if(ev.key==='Enter'){ev.preventDefault();ev.target.blur();}else if(ev.key==='Escape'){ev.preventDefault();const el=ev.target;const target=el.dataset.scope==='item'?getItem():el.dataset.scope==='bg'?doc.background:el.dataset.scope==='brush'?brush:doc;el.value=String(target?.[el.dataset.key]??'');el.blur();}}});
  panel.addEventListener('change',ev=>{const el=ev.target;if(el.dataset.key){changeBound(el,true);}});
  canvas.addEventListener('pointerdown',pointerDown);
  canvas.addEventListener('pointermove',pointerMove);
@@ -478,6 +511,8 @@ async function init(){
  $('#projectName').addEventListener('change',ev=>{doc.name=ev.target.value.trim()||'Reka Bentuk Saya';commit();});
  $('#openImageBtn').onclick=()=>{pendingImportMode='canvas';$('#fileImage').click();};$('#undoBtn').onclick=undo;$('#redoBtn').onclick=redo;$('#saveBtn').onclick=saveProject;$('#openBtn').onclick=()=>$('#fileProject').click();$('#newBtn').onclick=newProject;$('#exportBtn').onclick=showExportModal;
  $('#zoomIn').onclick=()=>setZoom(zoom+.25);$('#zoomOut').onclick=()=>setZoom(zoom-.25);$('#zoomFit').onclick=()=>setZoom(1);
+ $('#zoomValue').addEventListener('change',ev=>{const v=Number(ev.target.value);setZoom((Number.isFinite(v)?v:zoom*100)/100);});
+ $('#zoomValue').addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();ev.target.blur();}});
  $('#presetSelect').onchange=ev=>{if(ev.target.value==='custom'){showResizeModal();return;}const [w,h]=ev.target.value.split('x').map(Number);resizeDoc(w,h);};
  $('#fileImage').onchange=ev=>{loadImageFile(ev.target.files?.[0],pendingImportMode==='replace'?'replace':'item');ev.target.value='';};$('#fileBackground').onchange=ev=>{loadImageFile(ev.target.files?.[0],'bg');ev.target.value='';};$('#fileTexture').onchange=ev=>{loadImageFile(ev.target.files?.[0],'texture');ev.target.value='';};$('#fileFont').onchange=ev=>{const files=Array.from(ev.target.files||[]);ev.target.value='';importFontFiles(files);};$('#fileProject').onchange=ev=>{onProjectFile(ev.target.files?.[0]);ev.target.value='';};
  $('#closePanel').onclick=closePanel;$('#modalClose').onclick=hideModal;$('.modal-backdrop').onclick=hideModal;

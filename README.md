@@ -1,6 +1,16 @@
-# PixelLab Studio v2.3 — font kekal & import pukal
+# PixelLab Studio v2.4 — input nombor & mod cerah lembut
 
-Versi kemas kini kepada PixelLab Studio v2.2. Reka bentuk minimalis, alat utama, aliran import/crop imej, nisbah kanvas, Relative Size, layers, simpanan projek dan eksport **dikekalkan**.
+Versi kemas kini kepada PixelLab Studio v2.3. Reka bentuk minimalis, alat utama, aliran import/crop imej, nisbah kanvas, Relative Size, layers, simpanan projek dan eksport **dikekalkan**.
+
+## Ditambah dalam v2.4
+
+- **Slider + input nombor:** Semua pelaras slider dalam panel properti kini mempunyai kotak input angka. Taip nombor terus menggunakan keyboard dan tekan **Enter** / **Tab** atau klik luar untuk menggunakan nilainya. Slider dan kotak nombor diselaraskan dua hala.
+- **Boleh masukkan nombor negatif / perpuluhan:** Contohnya putaran `-45`, kelegapan `0.35`, jarak huruf `1.5` mengikut had ciri tersebut. Nombor yang melepasi had tetapan akan diselaraskan kepada julat yang diterima.
+- **Relative Size:** Peratus saiz relatif boleh ditaip juga, bukan hanya seret slider. Input lebar, tinggi, X, Y dan dimensi kanvas kekal boleh ditaip.
+- **Zum dengan nombor:** Tekan kotak peratus zoom di bawah kanvas, taip nombor `40` hingga `300`, tekan Enter.
+- **Mod cerah yang lebih redup:** Panel bernuansa kelabu-biru, tahap kontras teks sesuai, warna kawalan kurang menyilaukan. Ini hanya mempengaruhi antaramuka editor; imej yang dieksport tidak ditukar warnanya.
+- **Beza kawasan kerja dan kanvas:** Ruang sekitar kanvas lebih gelap, kanvas memiliki bingkai jelas, panel properti lebih cerah sedikit, dan butang pada bar alat dibezakan dengan latar serta sempadan.
+- **Kekalkan mod gelap:** Mod gelap, fungsi font import pukal dan pustaka font dari v2.3 masih disertakan.
 
 ## Ditambah dalam v2.3
 
@@ -29,12 +39,12 @@ Versi kemas kini kepada PixelLab Studio v2.2. Reka bentuk minimalis, alat utama,
 
 1. Buka `index.html` pada browser (Chrome, Safari, Firefox, Edge) atau hos folder ini pada penyedia hosting statik.
 2. Editor berjalan di pihak browser; tiada server atau akaun diperlukan.
-3. Untuk penggunaan offline satu fail, buka `PixelLab_Studio_v2.3_Offline.html` yang disertakan dalam ZIP.
+3. Untuk penggunaan offline satu fail, buka `PixelLab_Studio_v2.4_Offline.html` yang disertakan dalam ZIP.
 
 ## Kandungan
 
 - `index.html` — susun atur editor
 - `style.css` — gaya antaramuka cerah dan gelap yang responsif
 - `app.js` — fungsi editor, font, bentuk, pelekat dan pengurusan tema
-- `PixelLab_Studio_v2.3_Offline.html` — semua HTML/CSS/JS dalam satu fail, boleh terus dibuka dalam browser
+- `PixelLab_Studio_v2.4_Offline.html` — semua HTML/CSS/JS dalam satu fail, boleh terus dibuka dalam browser
 - `README.md` — panduan ini
